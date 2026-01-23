@@ -279,3 +279,23 @@ func Remove() error {
 	}
 	return nil
 }
+
+// RemoveAndReload removes all sshd configuration files and reloads sshd.
+func RemoveAndReload() error {
+	if err := Remove(); err != nil {
+		return err
+	}
+
+	// Reload sshd to apply changes
+	if err := Reload(); err != nil {
+		return fmt.Errorf("config files removed but failed to reload sshd: %w", err)
+	}
+
+	return nil
+}
+
+// IsConfigured checks if sshd hardening has been applied.
+func IsConfigured() bool {
+	_, err := os.Stat(BaseConfig)
+	return err == nil
+}
