@@ -11,6 +11,9 @@ Create restricted SSH users that can only create tunnels (SOCKS proxy, local por
 - Installs and configures fail2ban for brute-force protection
 - Blocks cron/at access for tunnel users
 - Users can only create `-L` (local) and `-D` (SOCKS) tunnels, not `-R` (remote)
+- Interactive menu for easy management
+- Full user lifecycle: create, update, list, delete
+- Clean uninstall of users and configuration
 
 ## Installation
 
@@ -29,33 +32,67 @@ sudo mv sshtun-user /usr/local/bin/
 
 ## Usage
 
-### Interactive Mode
+### Interactive Menu
+
+Run without arguments to get an interactive menu:
 
 ```bash
 sudo sshtun-user
-# or
-sudo sshtun-user <username>
 ```
 
-Prompts for username (if not provided), authentication method, and password. If fail2ban is not installed, prompts to install it.
+The menu provides options to:
+1. Create tunnel user
+2. Update tunnel user
+3. List tunnel users
+4. Delete tunnel user
+5. Configure sshd hardening
+6. Uninstall
+
+**Note:** Run "Configure sshd hardening" (option 5) first before creating users.
+
+### CLI Commands
+
+```bash
+# Apply sshd hardening (run this first)
+sudo sshtun-user configure
+
+# Create a new tunnel user (interactive)
+sudo sshtun-user create myuser
+
+# Update an existing user (interactive)
+sudo sshtun-user update myuser
+
+# List all tunnel users
+sudo sshtun-user list
+
+# Delete a tunnel user
+sudo sshtun-user delete myuser
+
+# Uninstall - delete all users
+sudo sshtun-user uninstall users
+
+# Uninstall - complete (users + configuration)
+sudo sshtun-user uninstall all
+```
 
 ### Non-Interactive Mode
 
 ```bash
-# With password (warning: visible in process list)
-sudo sshtun-user <username> --insecure-password <password>
+# Create user with password (warning: visible in process list)
+sudo sshtun-user create myuser --insecure-password "mypassword"
 
-# With SSH public key
-sudo sshtun-user <username> --pubkey "ssh-ed25519 AAAA..."
+# Create user with SSH public key
+sudo sshtun-user create myuser --pubkey "ssh-ed25519 AAAA..."
 
-# SSHD hardening only (no user creation)
-sudo sshtun-user --configure-only
+# Update user password
+sudo sshtun-user update myuser --insecure-password "newpassword"
 
-# Disable fail2ban
-sudo sshtun-user <username> --no-fail2ban
+# Update user SSH key
+sudo sshtun-user update myuser --pubkey "ssh-ed25519 AAAA..."
+
+# Skip fail2ban during configure
+sudo sshtun-user configure --no-fail2ban
 ```
-
-**Note:** In non-interactive mode (when using `--insecure-password` or `--pubkey`), the username argument is required.
 
 ### Options
 
@@ -64,7 +101,6 @@ sudo sshtun-user <username> --no-fail2ban
 | `--insecure-password <pass>` | Set password (visible in process list/history) |
 | `--pubkey <key>`             | Set SSH public key for key-based auth          |
 | `--no-fail2ban`              | Skip fail2ban installation/configuration       |
-| `--configure-only`           | Only apply sshd hardening, no user creation    |
 | `--version`, `-v`            | Show version                                   |
 | `--help`, `-h`               | Show help                                      |
 
@@ -97,6 +133,8 @@ For key-based auth, add `-i <private_key>`.
 - `sshtunnel-password`: Users with password authentication
 - `sshtunnel-key`: Users with SSH key authentication
 
+Tunnel users are detected by their membership in these groups.
+
 ### Additional Restrictions
 
 - Users are added to `/etc/cron.deny` and `/etc/at.deny` to prevent scheduled tasks
@@ -106,6 +144,20 @@ For key-based auth, add `-i <private_key>`.
 
 - Bans IPs after 5 failed attempts in 10 minutes
 - 1-hour ban, doubling for repeat offenders (max 1 week)
+
+## Uninstall
+
+The uninstall command provides options to clean up:
+
+```bash
+# Delete all tunnel users only
+sudo sshtun-user uninstall users
+
+# Complete uninstall (users + sshd config + groups)
+sudo sshtun-user uninstall all
+```
+
+Or use the interactive menu (option 6) for guided uninstall with confirmation prompts.
 
 ## Supported Distributions
 
