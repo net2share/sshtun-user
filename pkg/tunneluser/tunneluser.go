@@ -164,3 +164,25 @@ func splitLines(s string) []string {
 	}
 	return lines
 }
+
+// SwitchAuthMode changes a user's authentication mode by updating their group membership.
+func SwitchAuthMode(username string, newMode AuthMode) error {
+	// Determine target group
+	targetGroup := GroupPasswordAuth
+	if newMode == AuthModeKey {
+		targetGroup = GroupKeyAuth
+	}
+
+	// Remove from both tunnel groups first
+	for _, group := range []string{GroupPasswordAuth, GroupKeyAuth} {
+		exec.Command("gpasswd", "-d", username, group).Run()
+	}
+
+	// Add to the target group
+	cmd := exec.Command("usermod", "-aG", targetGroup, username)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add user to group %s: %w", targetGroup, err)
+	}
+
+	return nil
+}
