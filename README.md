@@ -159,6 +159,46 @@ sudo sshtun-user uninstall all
 
 Or use the interactive menu (option 6) for guided uninstall with confirmation prompts.
 
+## Using as a Go Module
+
+sshtun-user can be imported as a library by other Go projects:
+
+```go
+import "github.com/net2share/sshtun-user/pkg/cli"
+
+// Show the user management menu (for embedding in other tools)
+cli.ShowUserManagementMenu()
+
+// Auto-configure sshd and prompt for user creation
+userInfo := cli.ConfigureAndCreateUser()
+
+// Check if sshd hardening is configured
+if cli.IsConfigured() {
+    // ...
+}
+
+// Non-interactive complete uninstall
+cli.UninstallAllNonInteractive()
+```
+
+### Exported Functions
+
+| Function | Description |
+| -------- | ----------- |
+| `RunInteractiveMenu()` | Full standalone interactive menu |
+| `ShowUserManagementMenu()` | User management submenu (for embedding) |
+| `ConfigureAndCreateUser()` | Auto-configure sshd + prompt for user creation |
+| `IsConfigured()` | Check if sshd hardening is applied |
+| `UninstallAllNonInteractive()` | Complete uninstall without prompts |
+
+### Lower-level Packages
+
+```go
+import "github.com/net2share/sshtun-user/pkg/tunneluser"  // User CRUD operations
+import "github.com/net2share/sshtun-user/pkg/sshdconfig"  // sshd configuration
+import "github.com/net2share/sshtun-user/pkg/fail2ban"    // fail2ban setup
+```
+
 ## Supported Distributions
 
 - Fedora, RHEL, CentOS, Rocky, Alma, Oracle Linux (dnf/yum)
