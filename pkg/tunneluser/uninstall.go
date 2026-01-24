@@ -38,13 +38,18 @@ func DeleteAllUsers() ([]string, error) {
 }
 
 // GroupsHaveUsers checks if the tunnel groups have any members.
+// This checks both supplementary group membership and users with primary group.
 func GroupsHaveUsers() (bool, error) {
 	for _, group := range []string{GroupPasswordAuth, GroupKeyAuth} {
+		// Check supplementary group members
 		members, err := getGroupMembers(group)
-		if err != nil {
-			continue // Group might not exist
+		if err == nil && len(members) > 0 {
+			return true, nil
 		}
-		if len(members) > 0 {
+
+		// Check users with this as primary group
+		primaryUsers, err := getUsersWithPrimaryGroup(group)
+		if err == nil && len(primaryUsers) > 0 {
 			return true, nil
 		}
 	}
