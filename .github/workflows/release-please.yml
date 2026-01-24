@@ -52,7 +52,7 @@ jobs:
             ARCH="armv7"
           fi
           OUTPUT="sshtun-user-${{ matrix.goos }}-${ARCH}"
-          go build -ldflags="-s -w -X main.version=${{ needs.release-please.outputs.tag_name }}" -o "$OUTPUT" ./cmd/sshtun-user
+          go build -ldflags="-s -w -X main.version=${{ needs.release-please.outputs.tag_name }}" -o "$OUTPUT" .
 
       - name: Upload release asset
         env:
