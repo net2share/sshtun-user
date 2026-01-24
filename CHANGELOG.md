@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/net2share/sshtun-user/compare/v0.3.0...v0.3.1) (2026-01-24)
+
+
+### Features
+
+* rewrite CLI with Cobra and shared go-corelib/tui ([#8](https://github.com/net2share/sshtun-user/issues/8)) ([2fff26b](https://github.com/net2share/sshtun-user/commit/2fff26bc05acbcb825a2bd46db64e727f1c71c9e))
+
 ## [0.3.0](https://github.com/net2share/sshtun-user/compare/v0.2.0...v0.3.0) (2026-01-24)
 
 
