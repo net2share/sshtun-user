@@ -26,7 +26,7 @@ curl -sSL https://raw.githubusercontent.com/net2share/sshtun-user/main/install.s
 ### Build from Source
 
 ```bash
-go build -o sshtun-user ./cmd/sshtun-user
+go build -o sshtun-user .
 sudo mv sshtun-user /usr/local/bin/
 ```
 
@@ -185,7 +185,6 @@ cli.UninstallAllNonInteractive()
 
 | Function | Description |
 | -------- | ----------- |
-| `RunInteractiveMenu()` | Full standalone interactive menu |
 | `ShowUserManagementMenu()` | User management submenu (for embedding) |
 | `ConfigureAndCreateUser()` | Auto-configure sshd + prompt for user creation |
 | `IsConfigured()` | Check if sshd hardening is applied |
