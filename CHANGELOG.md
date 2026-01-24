@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/net2share/sshtun-user/compare/v0.2.0...v0.3.0) (2026-01-24)
+
+
+### Features
+
+* export CLI as reusable pkg/cli module ([#6](https://github.com/net2share/sshtun-user/issues/6)) ([e33b9be](https://github.com/net2share/sshtun-user/commit/e33b9beda5bcaa903d150b925b066c816da15b45))
+
+
+### Documentation
+
+* Add "Using as a Go Module" section to README ([e33b9be](https://github.com/net2share/sshtun-user/commit/e33b9beda5bcaa903d150b925b066c816da15b45))
+* update readme ([#4](https://github.com/net2share/sshtun-user/issues/4)) ([93c48bb](https://github.com/net2share/sshtun-user/commit/93c48bbd22033acdb449e067f42c4e3917dc5322))
+
 ## [0.2.0](https://github.com/net2share/sshtun-user/compare/v0.1.0...v0.2.0) (2026-01-23)
 
 
