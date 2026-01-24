@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/net2share/sshtun-user/compare/v0.3.1...v0.3.2) (2026-01-24)
+
+
+### Bug Fixes
+
+* **ci:** update build path in release workflow ([#10](https://github.com/net2share/sshtun-user/issues/10)) ([1790f95](https://github.com/net2share/sshtun-user/commit/1790f95d5b41c0c1a9870f58a6dd55cb17964f55))
+
 ## [0.3.1](https://github.com/net2share/sshtun-user/compare/v0.3.0...v0.3.1) (2026-01-24)
 
 
