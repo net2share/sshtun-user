@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/net2share/sshtun-user/compare/v0.3.2...v0.3.3) (2026-01-27)
+
+
+### Features
+
+* expose uninstall menu in embedded mode ([#12](https://github.com/net2share/sshtun-user/issues/12)) ([a5fc9dc](https://github.com/net2share/sshtun-user/commit/a5fc9dc0cf2a7fa3322c9b61e2ce37c29e817341))
+
 ## [0.3.2](https://github.com/net2share/sshtun-user/compare/v0.3.1...v0.3.2) (2026-01-24)
 
 
