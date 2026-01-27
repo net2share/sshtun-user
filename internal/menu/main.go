@@ -80,25 +80,22 @@ func runMenuLoop(osInfo *osdetect.OSInfo, standaloneMode bool) error {
 }
 
 func buildMenuOptions(standaloneMode bool) []huh.Option[string] {
-	if standaloneMode {
-		return []huh.Option[string]{
-			huh.NewOption("Create tunnel user", "create"),
-			huh.NewOption("Update tunnel user", "update"),
-			huh.NewOption("List tunnel users", "list"),
-			huh.NewOption("Delete tunnel user", "delete"),
-			huh.NewOption("Configure sshd hardening", "configure"),
-			huh.NewOption("Uninstall", "uninstall"),
-			huh.NewOption("Exit", "exit"),
-		}
-	}
-	return []huh.Option[string]{
+	options := []huh.Option[string]{
 		huh.NewOption("Create tunnel user", "create"),
 		huh.NewOption("Update tunnel user", "update"),
 		huh.NewOption("List tunnel users", "list"),
 		huh.NewOption("Delete tunnel user", "delete"),
 		huh.NewOption("Configure sshd hardening", "configure"),
-		huh.NewOption("Back to main menu", "back"),
+		huh.NewOption("Uninstall", "uninstall"),
 	}
+
+	if standaloneMode {
+		options = append(options, huh.NewOption("Exit", "exit"))
+	} else {
+		options = append(options, huh.NewOption("Back to main menu", "back"))
+	}
+
+	return options
 }
 
 func handleChoice(choice string, osInfo *osdetect.OSInfo, configured, standaloneMode bool) error {
@@ -120,10 +117,7 @@ func handleChoice(choice string, osInfo *osdetect.OSInfo, configured, standalone
 	case "configure":
 		return configureInteractive(osInfo)
 	case "uninstall":
-		if standaloneMode {
-			return uninstallInteractive()
-		}
-		return fmt.Errorf("invalid option")
+		return uninstallInteractive()
 	}
 	return nil
 }
