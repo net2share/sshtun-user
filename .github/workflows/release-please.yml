@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force create a release PR even without conventional commits'
+        type: boolean
+        default: false
+      release_as:
+        description: 'Force release as specific version (e.g., 1.0.0). Leave empty for auto.'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -22,6 +31,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          release-as: ${{ inputs.release_as || '' }}
 
   build-binaries:
     needs: release-please
