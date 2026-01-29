@@ -1,11 +1,12 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/charmbracelet/huh"
 	"github.com/net2share/go-corelib/osdetect"
 	"github.com/net2share/go-corelib/tui"
+	"github.com/net2share/sshtun-user/internal/menu"
 	"github.com/net2share/sshtun-user/pkg/fail2ban"
 	"github.com/net2share/sshtun-user/pkg/sshdconfig"
 	"github.com/net2share/sshtun-user/pkg/tunneluser"
@@ -91,7 +92,7 @@ func runCreateCLI(args []string) error {
 		}
 	}
 
-	printClientUsage(username, cfg.AuthMode)
+	menu.PrintClientUsage(username, cfg.AuthMode)
 	return nil
 }
 
@@ -103,36 +104,40 @@ func runCreateInteractive(args []string, osInfo *osdetect.OSInfo) error {
 			return fmt.Errorf("user '%s' already exists. Use 'sshtun-user update %s' to modify", username, username)
 		}
 	} else {
-		err := huh.NewInput().
-			Title("Username").
-			Description("Enter username for tunnel user").
-			Value(&username).
-			Validate(func(s string) error {
-				if s == "" {
-					return fmt.Errorf("username required")
-				}
-				if tunneluser.Exists(s) {
-					return fmt.Errorf("user '%s' already exists", s)
-				}
-				return nil
-			}).
-			Run()
-		if err != nil {
-			return err
+		for {
+			value, ok, err := tui.RunInput(tui.InputConfig{
+				Title:       "Username",
+				Description: "Enter username for tunnel user",
+			})
+			if err != nil {
+				return err
+			}
+			if !ok || value == "" {
+				return fmt.Errorf("username required")
+			}
+
+			// Validate
+			if tunneluser.Exists(value) {
+				tui.PrintError(fmt.Sprintf("user '%s' already exists", value))
+				continue
+			}
+			username = value
+			break
 		}
 	}
 
-	var authMode string
-	err := huh.NewSelect[string]().
-		Title("Authentication Method").
-		Options(
-			huh.NewOption("Password - simpler, suitable for shared access", "password"),
-			huh.NewOption("SSH Key - more secure, user provides public key", "key"),
-		).
-		Value(&authMode).
-		Run()
+	authMode, err := tui.RunMenu(tui.MenuConfig{
+		Title: "Authentication Method",
+		Options: []tui.MenuOption{
+			{Label: "Password - simpler, suitable for shared access", Value: "password"},
+			{Label: "SSH Key - more secure, user provides public key", Value: "key"},
+		},
+	})
 	if err != nil {
 		return err
+	}
+	if authMode == "" {
+		return fmt.Errorf("authentication method required")
 	}
 
 	cfg := &tunneluser.Config{
@@ -141,14 +146,20 @@ func runCreateInteractive(args []string, osInfo *osdetect.OSInfo) error {
 
 	if authMode == "key" {
 		cfg.AuthMode = tunneluser.AuthModeKey
-		publicKey, err := promptPubkey(username)
+		publicKey, err := menu.PromptPubkey(username)
+		if errors.Is(err, menu.ErrCancelled) {
+			return fmt.Errorf("public key input cancelled")
+		}
 		if err != nil {
 			return err
 		}
 		cfg.PublicKey = publicKey
 	} else {
 		cfg.AuthMode = tunneluser.AuthModePassword
-		password, err := promptPassword(username)
+		password, err := menu.PromptPassword(username)
+		if errors.Is(err, menu.ErrCancelled) {
+			return fmt.Errorf("password input cancelled")
+		}
 		if err != nil {
 			return err
 		}
@@ -157,12 +168,10 @@ func runCreateInteractive(args []string, osInfo *osdetect.OSInfo) error {
 
 	// Only prompt for fail2ban if not explicitly disabled and not already installed
 	if !createNoFail2bn && !fail2ban.IsInstalled() {
-		var enableFail2ban bool
-		err = huh.NewConfirm().
-			Title("Enable fail2ban brute-force protection?").
-			Description("Bans IPs after 5 failed login attempts").
-			Value(&enableFail2ban).
-			Run()
+		enableFail2ban, err := tui.RunConfirm(tui.ConfirmConfig{
+			Title:       "Enable fail2ban brute-force protection?",
+			Description: "Bans IPs after 5 failed login attempts",
+		})
 		if err != nil {
 			return err
 		}
@@ -185,63 +194,7 @@ func runCreateInteractive(args []string, osInfo *osdetect.OSInfo) error {
 
 	fmt.Println()
 	tui.PrintSuccess(fmt.Sprintf("User '%s' created successfully!", username))
-	printClientUsage(username, cfg.AuthMode)
+	menu.PrintClientUsage(username, cfg.AuthMode)
 	return nil
 }
 
-func promptPassword(username string) (string, error) {
-	var password string
-	err := huh.NewInput().
-		Title("Password").
-		Description(fmt.Sprintf("Enter password for '%s' (leave empty to auto-generate)", username)).
-		Value(&password).
-		Run()
-	if err != nil {
-		return "", err
-	}
-
-	if password == "" {
-		generated, err := tunneluser.GeneratePassword()
-		if err != nil {
-			return "", fmt.Errorf("failed to generate password: %w", err)
-		}
-		password = generated
-		tui.PrintBox("Generated Password (save this now!)", []string{tui.Code(password)})
-	}
-
-	return password, nil
-}
-
-func promptPubkey(username string) (string, error) {
-	var key string
-	err := huh.NewInput().
-		Title("SSH Public Key").
-		Description(fmt.Sprintf("Enter public key for '%s' (from ~/.ssh/id_ed25519.pub)", username)).
-		Value(&key).
-		Validate(func(s string) error {
-			if s == "" {
-				return fmt.Errorf("public key is required for key-based auth")
-			}
-			if err := tunneluser.ValidatePublicKey(s); err != nil {
-				return fmt.Errorf("invalid public key format: %w", err)
-			}
-			return nil
-		}).
-		Run()
-	if err != nil {
-		return "", err
-	}
-	return key, nil
-}
-
-func printClientUsage(username string, authMode tunneluser.AuthMode) {
-	fmt.Println()
-	fmt.Println("Client usage:")
-	if authMode == tunneluser.AuthModeKey {
-		fmt.Printf("  ssh -D 1080 -N -i <private_key> %s@<server>    # SOCKS proxy\n", username)
-		fmt.Printf("  ssh -L 8080:target:80 -N -i <private_key> %s@<server>  # Local forward\n", username)
-	} else {
-		fmt.Printf("  ssh -D 1080 -N %s@<server>    # SOCKS proxy\n", username)
-		fmt.Printf("  ssh -L 8080:target:80 -N %s@<server>  # Local forward\n", username)
-	}
-}

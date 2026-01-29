@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/charmbracelet/huh"
 	"github.com/net2share/go-corelib/osdetect"
 	"github.com/net2share/go-corelib/tui"
 	"github.com/net2share/sshtun-user/pkg/fail2ban"
@@ -13,8 +12,9 @@ import (
 	"github.com/net2share/sshtun-user/pkg/tunneluser"
 )
 
-// errCancelled is returned when user cancels an operation (no WaitForEnter needed).
-var errCancelled = errors.New("cancelled")
+// ErrCancelled is returned when user cancels an operation.
+// In menu context, this skips WaitForEnter. In CLI context, this can be handled as an error.
+var ErrCancelled = errors.New("cancelled")
 
 // Version and BuildTime are set by cmd package.
 var (
@@ -22,9 +22,9 @@ var (
 	BuildTime = "unknown"
 )
 
-// RunInteractive shows the main interactive menu (standalone mode).
-func RunInteractive() error {
-	tui.PrintSimpleBanner("SSH Tunnel User Manager", Version, BuildTime)
+// Run shows the main interactive menu.
+func Run() error {
+	tui.SetAppInfo("sshtun-user", Version, BuildTime)
 
 	osInfo, err := osdetect.Detect()
 	if err != nil {
@@ -33,43 +33,31 @@ func RunInteractive() error {
 		fmt.Printf("Detected OS: %s (package manager: %s)\n", osInfo.ID, osInfo.PackageManager)
 	}
 
-	return runMenuLoop(osInfo, true)
+	return runMenuLoop(osInfo)
 }
 
-// runMenuLoop is the shared menu logic for both standalone and embedded modes.
-func runMenuLoop(osInfo *osdetect.OSInfo, standaloneMode bool) error {
+func runMenuLoop(osInfo *osdetect.OSInfo) error {
 	for {
 		fmt.Println()
 		configured := sshdconfig.IsConfigured()
+		hasUsers, _ := tunneluser.GroupsHaveUsers()
 
-		if !configured {
-			fmt.Println()
-			tui.PrintWarning("sshd not configured - run 'Configure sshd hardening' first")
-		}
-
-		options := buildMenuOptions(standaloneMode)
-		var choice string
-
-		err := huh.NewSelect[string]().
-			Title("SSH Tunnel User Manager").
-			Options(options...).
-			Value(&choice).
-			Run()
-
+		options := buildMenuOptions(configured, hasUsers)
+		choice, err := tui.RunMenu(tui.MenuConfig{
+			Title:   "SSH Tunnel User Manager",
+			Options: options,
+		})
 		if err != nil {
 			return err
 		}
 
-		if choice == "exit" || choice == "back" {
-			if standaloneMode {
-				tui.PrintInfo("Goodbye!")
-			}
+		if choice == "" || choice == "exit" {
+			tui.PrintInfo("Goodbye!")
 			return nil
 		}
 
-		err = handleChoice(choice, osInfo, configured, standaloneMode)
-		if errors.Is(err, errCancelled) {
-			// User cancelled, no need to wait
+		err = handleChoice(choice, osInfo)
+		if errors.Is(err, ErrCancelled) {
 			continue
 		}
 		if err != nil {
@@ -79,39 +67,42 @@ func runMenuLoop(osInfo *osdetect.OSInfo, standaloneMode bool) error {
 	}
 }
 
-func buildMenuOptions(standaloneMode bool) []huh.Option[string] {
-	options := []huh.Option[string]{
-		huh.NewOption("Create tunnel user", "create"),
-		huh.NewOption("Update tunnel user", "update"),
-		huh.NewOption("List tunnel users", "list"),
-		huh.NewOption("Delete tunnel user", "delete"),
-		huh.NewOption("Configure sshd hardening", "configure"),
-		huh.NewOption("Uninstall", "uninstall"),
+func buildMenuOptions(configured, hasUsers bool) []tui.MenuOption {
+	var options []tui.MenuOption
+
+	// Configure - only show when NOT configured
+	if !configured {
+		options = append(options, tui.MenuOption{Label: "Configure sshd hardening", Value: "configure"})
 	}
 
-	if standaloneMode {
-		options = append(options, huh.NewOption("Exit", "exit"))
-	} else {
-		options = append(options, huh.NewOption("Back to main menu", "back"))
+	// User management - only show when configured
+	if configured {
+		options = append(options,
+			tui.MenuOption{Label: "Create tunnel user", Value: "create"},
+			tui.MenuOption{Label: "Update tunnel user", Value: "update"},
+			tui.MenuOption{Label: "List tunnel users", Value: "list"},
+			tui.MenuOption{Label: "Delete tunnel user", Value: "delete"},
+		)
 	}
+
+	// Uninstall - only show when configured OR users exist
+	if configured || hasUsers {
+		options = append(options, tui.MenuOption{Label: "Uninstall", Value: "uninstall"})
+	}
+
+	options = append(options, tui.MenuOption{Label: "Exit", Value: "exit"})
 
 	return options
 }
 
-func handleChoice(choice string, osInfo *osdetect.OSInfo, configured, standaloneMode bool) error {
-	requiresConfig := choice == "create" || choice == "update" || choice == "list" || choice == "delete"
-	if requiresConfig && !configured {
-		return fmt.Errorf("please run 'Configure sshd hardening' first")
-	}
-
+func handleChoice(choice string, osInfo *osdetect.OSInfo) error {
 	switch choice {
 	case "create":
 		return createUserInteractive()
 	case "update":
 		return updateUserInteractive()
 	case "list":
-		listUsersBox()
-		return nil
+		return listUsersFullscreen()
 	case "delete":
 		return deleteUserInteractive()
 	case "configure":
@@ -122,39 +113,40 @@ func handleChoice(choice string, osInfo *osdetect.OSInfo, configured, standalone
 	return nil
 }
 
-// createUserInteractive handles user creation in interactive mode.
 func createUserInteractive() error {
 	var username string
-	err := huh.NewInput().
-		Title("Username").
-		Description("Enter username for tunnel user").
-		Value(&username).
-		Validate(func(s string) error {
-			if s == "" {
-				return fmt.Errorf("username required")
-			}
-			if tunneluser.Exists(s) {
-				return fmt.Errorf("user '%s' already exists", s)
-			}
-			return nil
-		}).
-		Run()
+	for {
+		value, ok, err := tui.RunInput(tui.InputConfig{
+			Title:       "Username",
+			Description: "Enter username for tunnel user",
+		})
+		if err != nil {
+			return err
+		}
+		if !ok || value == "" {
+			return ErrCancelled
+		}
+
+		if tunneluser.Exists(value) {
+			tui.PrintError(fmt.Sprintf("user '%s' already exists", value))
+			continue
+		}
+		username = value
+		break
+	}
+
+	authMode, err := tui.RunMenu(tui.MenuConfig{
+		Title: "Authentication Method",
+		Options: []tui.MenuOption{
+			{Label: "Password - simpler, suitable for shared access", Value: "password"},
+			{Label: "SSH Key - more secure, user provides public key", Value: "key"},
+		},
+	})
 	if err != nil {
 		return err
 	}
-
-	// Auth mode selection
-	var authMode string
-	err = huh.NewSelect[string]().
-		Title("Authentication Method").
-		Options(
-			huh.NewOption("Password - simpler, suitable for shared access", "password"),
-			huh.NewOption("SSH Key - more secure, user provides public key", "key"),
-		).
-		Value(&authMode).
-		Run()
-	if err != nil {
-		return err
+	if authMode == "" {
+		return ErrCancelled
 	}
 
 	cfg := &tunneluser.Config{
@@ -163,14 +155,14 @@ func createUserInteractive() error {
 
 	if authMode == "key" {
 		cfg.AuthMode = tunneluser.AuthModeKey
-		publicKey, err := promptPubkey(username)
+		publicKey, err := PromptPubkey(username)
 		if err != nil {
 			return err
 		}
 		cfg.PublicKey = publicKey
 	} else {
 		cfg.AuthMode = tunneluser.AuthModePassword
-		password, err := promptPassword(username)
+		password, err := PromptPassword(username)
 		if err != nil {
 			return err
 		}
@@ -189,11 +181,10 @@ func createUserInteractive() error {
 
 	fmt.Println()
 	tui.PrintSuccess(fmt.Sprintf("User '%s' created successfully!", username))
-	printClientUsage(username, cfg.AuthMode)
+	PrintClientUsage(username, cfg.AuthMode)
 	return nil
 }
 
-// updateUserInteractive handles user update in interactive mode.
 func updateUserInteractive() error {
 	users, err := tunneluser.List()
 	if err != nil {
@@ -205,28 +196,24 @@ func updateUserInteractive() error {
 		return nil
 	}
 
-	// Build user options - Back first so users are visible below
-	options := []huh.Option[string]{
-		huh.NewOption("Back", ""),
+	options := []tui.MenuOption{
+		{Label: "Back", Value: ""},
 	}
 	for _, user := range users {
 		label := fmt.Sprintf("%s (%s)", user.Username, user.AuthMode)
-		options = append(options, huh.NewOption(label, user.Username))
+		options = append(options, tui.MenuOption{Label: label, Value: user.Username})
 	}
 
-	var username string
-	err = huh.NewSelect[string]().
-		Title("Select user to update").
-		Options(options...).
-		Height(len(options) + 2).
-		Value(&username).
-		Run()
+	username, err := tui.RunMenu(tui.MenuConfig{
+		Title:   "Select user to update",
+		Options: options,
+	})
 	if err != nil {
 		return err
 	}
 
 	if username == "" {
-		return errCancelled
+		return ErrCancelled
 	}
 
 	currentMode, _ := tunneluser.GetAuthMode(username)
@@ -236,16 +223,14 @@ func updateUserInteractive() error {
 func showUpdateUserMenu(username string, currentMode tunneluser.AuthMode) error {
 	fmt.Printf("\nUpdating user '%s' (current auth: %s)\n", username, currentMode)
 
-	var choice string
-	err := huh.NewSelect[string]().
-		Title("What would you like to update?").
-		Options(
-			huh.NewOption("Back", "back"),
-			huh.NewOption("Change password (switch to password auth if needed)", "password"),
-			huh.NewOption("Change SSH key (switch to key auth if needed)", "key"),
-		).
-		Value(&choice).
-		Run()
+	choice, err := tui.RunMenu(tui.MenuConfig{
+		Title: "What would you like to update?",
+		Options: []tui.MenuOption{
+			{Label: "Back", Value: "back"},
+			{Label: "Change password (switch to password auth if needed)", Value: "password"},
+			{Label: "Change SSH key (switch to key auth if needed)", Value: "key"},
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -256,12 +241,12 @@ func showUpdateUserMenu(username string, currentMode tunneluser.AuthMode) error 
 	case "key":
 		return updateUserKey(username, currentMode)
 	default:
-		return errCancelled
+		return ErrCancelled
 	}
 }
 
 func updateUserPassword(username string, currentMode tunneluser.AuthMode) error {
-	password, err := promptPassword(username)
+	password, err := PromptPassword(username)
 	if err != nil {
 		return err
 	}
@@ -279,12 +264,12 @@ func updateUserPassword(username string, currentMode tunneluser.AuthMode) error 
 
 	fmt.Println()
 	tui.PrintSuccess(fmt.Sprintf("Password updated for '%s'!", username))
-	printClientUsage(username, tunneluser.AuthModePassword)
+	PrintClientUsage(username, tunneluser.AuthModePassword)
 	return nil
 }
 
 func updateUserKey(username string, currentMode tunneluser.AuthMode) error {
-	publicKey, err := promptPubkey(username)
+	publicKey, err := PromptPubkey(username)
 	if err != nil {
 		return err
 	}
@@ -306,32 +291,32 @@ func updateUserKey(username string, currentMode tunneluser.AuthMode) error {
 
 	fmt.Println()
 	tui.PrintSuccess(fmt.Sprintf("SSH key updated for '%s'!", username))
-	printClientUsage(username, tunneluser.AuthModeKey)
+	PrintClientUsage(username, tunneluser.AuthModeKey)
 	return nil
 }
 
-func listUsersBox() {
-	fmt.Println()
+func listUsersFullscreen() error {
 	users, err := tunneluser.List()
 	if err != nil {
-		tui.PrintError("Failed to list users: " + err.Error())
-		return
+		return fmt.Errorf("failed to list users: %w", err)
 	}
 
-	if len(users) == 0 {
-		tui.PrintInfo("No tunnel users found.")
-		return
-	}
-
-	lines := make([]string, len(users))
+	items := make([]string, len(users))
 	for i, user := range users {
-		lines[i] = fmt.Sprintf("%s (%s auth)", user.Username, user.AuthMode)
+		items[i] = fmt.Sprintf("%s (%s auth)", user.Username, user.AuthMode)
 	}
 
-	tui.PrintBox("Tunnel Users", lines)
+	if err := tui.ShowList(tui.ListConfig{
+		Title:     "Tunnel Users",
+		Items:     items,
+		EmptyText: "No tunnel users found.",
+	}); err != nil {
+		return err
+	}
+
+	return ErrCancelled
 }
 
-// deleteUserInteractive handles user deletion in interactive mode.
 func deleteUserInteractive() error {
 	users, err := tunneluser.List()
 	if err != nil {
@@ -343,41 +328,35 @@ func deleteUserInteractive() error {
 		return nil
 	}
 
-	// Build user options - Back first so users are visible below
-	options := []huh.Option[string]{
-		huh.NewOption("Back", ""),
+	options := []tui.MenuOption{
+		{Label: "Back", Value: ""},
 	}
 	for _, user := range users {
 		label := fmt.Sprintf("%s (%s)", user.Username, user.AuthMode)
-		options = append(options, huh.NewOption(label, user.Username))
+		options = append(options, tui.MenuOption{Label: label, Value: user.Username})
 	}
 
-	var username string
-	err = huh.NewSelect[string]().
-		Title("Select user to delete").
-		Options(options...).
-		Height(len(options) + 2).
-		Value(&username).
-		Run()
+	username, err := tui.RunMenu(tui.MenuConfig{
+		Title:   "Select user to delete",
+		Options: options,
+	})
 	if err != nil {
 		return err
 	}
 
 	if username == "" {
-		return errCancelled
+		return ErrCancelled
 	}
 
-	var confirm bool
-	err = huh.NewConfirm().
-		Title(fmt.Sprintf("Delete user '%s'?", username)).
-		Value(&confirm).
-		Run()
+	confirm, err := tui.RunConfirm(tui.ConfirmConfig{
+		Title: fmt.Sprintf("Delete user '%s'?", username),
+	})
 	if err != nil {
 		return err
 	}
 
 	if !confirm {
-		return errCancelled
+		return ErrCancelled
 	}
 
 	if err := tunneluser.Delete(username); err != nil {
@@ -388,7 +367,6 @@ func deleteUserInteractive() error {
 	return nil
 }
 
-// configureInteractive handles configure in interactive mode.
 func configureInteractive(osInfo *osdetect.OSInfo) error {
 	fmt.Println()
 	tui.PrintInfo("Applying sshd hardening configuration...")
@@ -398,12 +376,10 @@ func configureInteractive(osInfo *osdetect.OSInfo) error {
 	}
 
 	if !fail2ban.IsInstalled() {
-		var enableFail2ban bool
-		err := huh.NewConfirm().
-			Title("Enable fail2ban brute-force protection?").
-			Description("Bans IPs after 5 failed login attempts").
-			Value(&enableFail2ban).
-			Run()
+		enableFail2ban, err := tui.RunConfirm(tui.ConfirmConfig{
+			Title:       "Enable fail2ban brute-force protection?",
+			Description: "Bans IPs after 5 failed login attempts",
+		})
 		if err != nil {
 			return err
 		}
@@ -424,26 +400,28 @@ func configureInteractive(osInfo *osdetect.OSInfo) error {
 	return nil
 }
 
-// uninstallInteractive shows the uninstall submenu.
 func uninstallInteractive() error {
 	for {
-		var choice string
-		err := huh.NewSelect[string]().
-			Title("Uninstall Options").
-			Options(
-				huh.NewOption("Delete all tunnel users", "users"),
-				huh.NewOption("Remove configuration (groups, sshd config)", "config"),
-				huh.NewOption("Complete uninstall (users + configuration)", "all"),
-				huh.NewOption("Back", "back"),
-			).
-			Value(&choice).
-			Run()
+		configured := sshdconfig.IsConfigured()
+		users, _ := tunneluser.List()
+		hasUsers := len(users) > 0
+
+		options := buildUninstallOptions(configured, hasUsers)
+		if len(options) == 1 {
+			tui.PrintInfo("Nothing to uninstall.")
+			return ErrCancelled
+		}
+
+		choice, err := tui.RunMenu(tui.MenuConfig{
+			Title:   "Uninstall Options",
+			Options: options,
+		})
 		if err != nil {
 			return err
 		}
 
-		if choice == "back" {
-			return errCancelled
+		if choice == "" || choice == "back" {
+			return ErrCancelled
 		}
 
 		var err2 error
@@ -455,7 +433,7 @@ func uninstallInteractive() error {
 		case "all":
 			err2 = uninstallAll()
 		}
-		if errors.Is(err2, errCancelled) {
+		if errors.Is(err2, ErrCancelled) {
 			continue
 		}
 		if err2 != nil {
@@ -463,6 +441,26 @@ func uninstallInteractive() error {
 		}
 		tui.WaitForEnter()
 	}
+}
+
+func buildUninstallOptions(configured, hasUsers bool) []tui.MenuOption {
+	var options []tui.MenuOption
+
+	if hasUsers {
+		options = append(options, tui.MenuOption{Label: "Delete all tunnel users", Value: "users"})
+	}
+
+	if configured && !hasUsers {
+		options = append(options, tui.MenuOption{Label: "Remove configuration (groups, sshd config)", Value: "config"})
+	}
+
+	if configured && hasUsers {
+		options = append(options, tui.MenuOption{Label: "Complete uninstall (users + configuration)", Value: "all"})
+	}
+
+	options = append(options, tui.MenuOption{Label: "Back", Value: "back"})
+
+	return options
 }
 
 func uninstallUsers() error {
@@ -481,17 +479,15 @@ func uninstallUsers() error {
 		fmt.Printf("  - %s (%s)\n", user.Username, user.AuthMode)
 	}
 
-	var confirm bool
-	err = huh.NewConfirm().
-		Title(fmt.Sprintf("Delete all %d tunnel users?", len(users))).
-		Value(&confirm).
-		Run()
+	confirm, err := tui.RunConfirm(tui.ConfirmConfig{
+		Title: fmt.Sprintf("Delete all %d tunnel users?", len(users)),
+	})
 	if err != nil {
 		return err
 	}
 
 	if !confirm {
-		return errCancelled
+		return ErrCancelled
 	}
 
 	fmt.Println()
@@ -523,17 +519,15 @@ func uninstallConfig() error {
 	fmt.Println("  - sshd hardening configuration files")
 	fmt.Println("  - Authorized keys directory (if empty)")
 
-	var confirm bool
-	err := huh.NewConfirm().
-		Title("Remove all configuration?").
-		Value(&confirm).
-		Run()
+	confirm, err := tui.RunConfirm(tui.ConfirmConfig{
+		Title: "Remove all configuration?",
+	})
 	if err != nil {
 		return err
 	}
 
 	if !confirm {
-		return errCancelled
+		return ErrCancelled
 	}
 
 	fmt.Println()
@@ -567,27 +561,28 @@ func uninstallConfig() error {
 
 func uninstallAll() error {
 	users, _ := tunneluser.List()
+	configured := sshdconfig.IsConfigured()
 
 	fmt.Println()
 	tui.PrintWarning("This will completely remove sshtun-user configuration:")
 	if len(users) > 0 {
 		fmt.Printf("  - Delete %d tunnel user(s)\n", len(users))
 	}
-	fmt.Println("  - Remove tunnel groups")
-	fmt.Println("  - Remove sshd hardening configuration")
+	if configured {
+		fmt.Println("  - Remove tunnel groups")
+		fmt.Println("  - Remove sshd hardening configuration")
+	}
 	fmt.Println("  - Clean up authorized keys and deny files")
 
-	var confirm bool
-	err := huh.NewConfirm().
-		Title("Proceed with complete uninstall?").
-		Value(&confirm).
-		Run()
+	confirm, err := tui.RunConfirm(tui.ConfirmConfig{
+		Title: "Proceed with complete uninstall?",
+	})
 	if err != nil {
 		return err
 	}
 
 	if !confirm {
-		return errCancelled
+		return ErrCancelled
 	}
 
 	fmt.Println()
@@ -605,20 +600,20 @@ func uninstallAll() error {
 		}
 	}
 
-	if sshdconfig.IsConfigured() {
+	if configured {
 		fmt.Println("Removing sshd configuration...")
 		if err := sshdconfig.RemoveAndReload(); err != nil {
 			tui.PrintWarning("sshd config removal warning: " + err.Error())
 		} else {
 			fmt.Println("  sshd configuration removed")
 		}
-	}
 
-	fmt.Println("Removing tunnel groups...")
-	if err := tunneluser.DeleteGroups(); err != nil {
-		tui.PrintWarning("Group removal warning: " + err.Error())
-	} else {
-		fmt.Println("  Tunnel groups removed")
+		fmt.Println("Removing tunnel groups...")
+		if err := tunneluser.DeleteGroups(); err != nil {
+			tui.PrintWarning("Group removal warning: " + err.Error())
+		} else {
+			fmt.Println("  Tunnel groups removed")
+		}
 	}
 
 	fmt.Println("Cleaning up...")
@@ -630,16 +625,16 @@ func uninstallAll() error {
 	return nil
 }
 
-// promptPassword prompts for a password or generates one.
-func promptPassword(username string) (string, error) {
-	var password string
-	err := huh.NewInput().
-		Title("Password").
-		Description(fmt.Sprintf("Enter password for '%s' (leave empty to auto-generate)", username)).
-		Value(&password).
-		Run()
+func PromptPassword(username string) (string, error) {
+	password, ok, err := tui.RunInput(tui.InputConfig{
+		Title:       "Password",
+		Description: fmt.Sprintf("Enter password for '%s' (leave empty to auto-generate)", username),
+	})
 	if err != nil {
 		return "", err
+	}
+	if !ok {
+		return "", ErrCancelled
 	}
 
 	if password == "" {
@@ -654,31 +649,32 @@ func promptPassword(username string) (string, error) {
 	return password, nil
 }
 
-// promptPubkey prompts for an SSH public key.
-func promptPubkey(username string) (string, error) {
-	var key string
-	err := huh.NewInput().
-		Title("SSH Public Key").
-		Description(fmt.Sprintf("Enter public key for '%s' (from ~/.ssh/id_ed25519.pub)", username)).
-		Value(&key).
-		Validate(func(s string) error {
-			if s == "" {
-				return fmt.Errorf("public key is required for key-based auth")
-			}
-			if err := tunneluser.ValidatePublicKey(s); err != nil {
-				return fmt.Errorf("invalid public key format: %w", err)
-			}
-			return nil
-		}).
-		Run()
-	if err != nil {
-		return "", err
+func PromptPubkey(username string) (string, error) {
+	for {
+		key, ok, err := tui.RunInput(tui.InputConfig{
+			Title:       "SSH Public Key",
+			Description: fmt.Sprintf("Enter public key for '%s' (from ~/.ssh/id_ed25519.pub)", username),
+		})
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", ErrCancelled
+		}
+
+		if key == "" {
+			tui.PrintError("public key is required for key-based auth")
+			continue
+		}
+		if err := tunneluser.ValidatePublicKey(key); err != nil {
+			tui.PrintError(fmt.Sprintf("invalid public key format: %v", err))
+			continue
+		}
+		return key, nil
 	}
-	return key, nil
 }
 
-// printClientUsage prints SSH client usage examples.
-func printClientUsage(username string, authMode tunneluser.AuthMode) {
+func PrintClientUsage(username string, authMode tunneluser.AuthMode) {
 	fmt.Println()
 	fmt.Println("Client usage:")
 	if authMode == tunneluser.AuthModeKey {

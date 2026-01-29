@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/net2share/go-corelib/osdetect"
+	"github.com/net2share/go-corelib/tui"
 	"github.com/net2share/sshtun-user/pkg/sshdconfig"
 	"github.com/net2share/sshtun-user/pkg/tunneluser"
 	"github.com/spf13/cobra"
@@ -29,15 +30,17 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list users: %w", err)
 	}
 
-	if len(users) == 0 {
-		fmt.Println("No tunnel users found.")
-		return nil
+	items := make([]string, len(users))
+	for i, user := range users {
+		items[i] = fmt.Sprintf("%s (%s auth)", user.Username, user.AuthMode)
 	}
 
-	fmt.Println("Tunnel users:")
-	for _, user := range users {
-		fmt.Printf("  %s (%s)\n", user.Username, user.AuthMode)
-	}
+	// Set app info for fullscreen footer
+	tui.SetAppInfo("sshtun-user", Version, BuildTime)
 
-	return nil
+	return tui.ShowList(tui.ListConfig{
+		Title:     "Tunnel Users",
+		Items:     items,
+		EmptyText: "No tunnel users found.",
+	})
 }

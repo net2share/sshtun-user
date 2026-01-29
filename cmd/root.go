@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 		}
 		menu.Version = Version
 		menu.BuildTime = BuildTime
-		return menu.RunInteractive()
+		return menu.Run()
 	},
 }
 

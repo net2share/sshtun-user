@@ -27,3 +27,8 @@ Thumbs.db
 
 # Build artifacts
 dist/
+
+# AI agents
+.claude/
+CLAUDE.md
+claude.md
