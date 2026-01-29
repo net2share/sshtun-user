@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/net2share/sshtun-user/compare/v0.3.3...v0.3.4) (2026-01-29)
+
+
+### Code Refactoring
+
+* migrate to go-corelib fullscreen TUI components ([#14](https://github.com/net2share/sshtun-user/issues/14)) ([473788f](https://github.com/net2share/sshtun-user/commit/473788fa90bcd84df1a64dc0d120f35214746c5b))
+
 ## [0.3.3](https://github.com/net2share/sshtun-user/compare/v0.3.2...v0.3.3) (2026-01-27)
 
 
