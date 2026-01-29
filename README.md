@@ -71,6 +71,9 @@ sudo sshtun-user delete myuser
 # Uninstall - delete all users
 sudo sshtun-user uninstall users
 
+# Uninstall - remove configuration only (requires no users)
+sudo sshtun-user uninstall config
+
 # Uninstall - complete (users + configuration)
 sudo sshtun-user uninstall all
 ```
@@ -153,50 +156,14 @@ The uninstall command provides options to clean up:
 # Delete all tunnel users only
 sudo sshtun-user uninstall users
 
+# Remove configuration only (groups, sshd config) - requires no users
+sudo sshtun-user uninstall config
+
 # Complete uninstall (users + sshd config + groups)
 sudo sshtun-user uninstall all
 ```
 
-Or use the interactive menu (option 6) for guided uninstall with confirmation prompts.
-
-## Using as a Go Module
-
-sshtun-user can be imported as a library by other Go projects:
-
-```go
-import "github.com/net2share/sshtun-user/pkg/cli"
-
-// Show the user management menu (for embedding in other tools)
-cli.ShowUserManagementMenu()
-
-// Auto-configure sshd and prompt for user creation
-userInfo := cli.ConfigureAndCreateUser()
-
-// Check if sshd hardening is configured
-if cli.IsConfigured() {
-    // ...
-}
-
-// Non-interactive complete uninstall
-cli.UninstallAllNonInteractive()
-```
-
-### Exported Functions
-
-| Function | Description |
-| -------- | ----------- |
-| `ShowUserManagementMenu()` | User management submenu (for embedding) |
-| `ConfigureAndCreateUser()` | Auto-configure sshd + prompt for user creation |
-| `IsConfigured()` | Check if sshd hardening is applied |
-| `UninstallAllNonInteractive()` | Complete uninstall without prompts |
-
-### Lower-level Packages
-
-```go
-import "github.com/net2share/sshtun-user/pkg/tunneluser"  // User CRUD operations
-import "github.com/net2share/sshtun-user/pkg/sshdconfig"  // sshd configuration
-import "github.com/net2share/sshtun-user/pkg/fail2ban"    // fail2ban setup
-```
+Or use the interactive menu for guided uninstall with confirmation prompts.
 
 ## Supported Distributions
 

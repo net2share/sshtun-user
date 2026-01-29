@@ -1,11 +1,12 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/charmbracelet/huh"
 	"github.com/net2share/go-corelib/osdetect"
 	"github.com/net2share/go-corelib/tui"
+	"github.com/net2share/sshtun-user/internal/menu"
 	"github.com/net2share/sshtun-user/pkg/sshdconfig"
 	"github.com/net2share/sshtun-user/pkg/tunneluser"
 	"github.com/spf13/cobra"
@@ -86,23 +87,24 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 func runUpdateInteractive(username string, currentMode tunneluser.AuthMode) error {
 	fmt.Printf("\nUpdating user '%s' (current auth: %s)\n", username, currentMode)
 
-	var choice string
-	err := huh.NewSelect[string]().
-		Title("What would you like to update?").
-		Options(
-			huh.NewOption("Change password (switch to password auth if needed)", "password"),
-			huh.NewOption("Change SSH key (switch to key auth if needed)", "key"),
-			huh.NewOption("Cancel", "cancel"),
-		).
-		Value(&choice).
-		Run()
+	choice, err := tui.RunMenu(tui.MenuConfig{
+		Title: "What would you like to update?",
+		Options: []tui.MenuOption{
+			{Label: "Change password (switch to password auth if needed)", Value: "password"},
+			{Label: "Change SSH key (switch to key auth if needed)", Value: "key"},
+			{Label: "Cancel", Value: "cancel"},
+		},
+	})
 	if err != nil {
 		return err
 	}
 
 	switch choice {
 	case "password":
-		password, err := promptPassword(username)
+		password, err := menu.PromptPassword(username)
+		if errors.Is(err, menu.ErrCancelled) {
+			return fmt.Errorf("password input cancelled")
+		}
 		if err != nil {
 			return err
 		}
@@ -117,10 +119,13 @@ func runUpdateInteractive(username string, currentMode tunneluser.AuthMode) erro
 		}
 		fmt.Println()
 		tui.PrintSuccess(fmt.Sprintf("Password updated for '%s'!", username))
-		printClientUsage(username, tunneluser.AuthModePassword)
+		menu.PrintClientUsage(username, tunneluser.AuthModePassword)
 
 	case "key":
-		publicKey, err := promptPubkey(username)
+		publicKey, err := menu.PromptPubkey(username)
+		if errors.Is(err, menu.ErrCancelled) {
+			return fmt.Errorf("public key input cancelled")
+		}
 		if err != nil {
 			return err
 		}
@@ -138,7 +143,7 @@ func runUpdateInteractive(username string, currentMode tunneluser.AuthMode) erro
 		}
 		fmt.Println()
 		tui.PrintSuccess(fmt.Sprintf("SSH key updated for '%s'!", username))
-		printClientUsage(username, tunneluser.AuthModeKey)
+		menu.PrintClientUsage(username, tunneluser.AuthModeKey)
 	}
 
 	return nil

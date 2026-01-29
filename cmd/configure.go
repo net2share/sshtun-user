@@ -27,6 +27,10 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if sshdconfig.IsConfigured() {
+		return fmt.Errorf("sshd is already configured. Use 'sshtun-user uninstall config' to remove configuration first")
+	}
+
 	osInfo, err := osdetect.Detect()
 	if err != nil {
 		tui.PrintWarning("Could not detect OS: " + err.Error())
