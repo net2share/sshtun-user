@@ -34,7 +34,7 @@ MaxStartups 50:30:100
 
 # === Crypto Hardening ===
 KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org
-Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
 MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com
 
 # === General Hardening ===
