@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/net2share/sshtun-user/compare/v0.3.4...v0.3.5) (2026-02-26)
+
+
+### Bug Fixes
+
+* add CTR cipher fallbacks for older SSH clients ([#16](https://github.com/net2share/sshtun-user/issues/16)) ([ceeda35](https://github.com/net2share/sshtun-user/commit/ceeda356e98eb26cac4e30ef72ff0647459c52e3))
+
 ## [0.3.4](https://github.com/net2share/sshtun-user/compare/v0.3.3...v0.3.4) (2026-01-29)
 
 
